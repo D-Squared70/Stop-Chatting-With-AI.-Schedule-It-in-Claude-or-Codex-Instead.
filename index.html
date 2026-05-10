@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Scheduled AI Tasks</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT@9..144,200..700,0..100&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink:        #0a0a0e;
+    --ink-2:      #15151c;
+    --ink-3:      #1d1d26;
+    --paper:      #f4ecdb;
+    --paper-dim:  #aaa394;
+    --paper-faint:#5e5b54;
+    --rule:       #2c2c36;
+    --rule-strong:#42424f;
+    --accent:     #f0a85a;
+    --transition: cubic-bezier(0.7, 0, 0.2, 1);
+  }
+
+  /* per-chapter accent */
+  .ch-0 { --accent: #f0a85a; --accent-soft: rgba(240,168,90,0.10); }   /* Promise */
+  .ch-1 { --accent: #6db0c8; --accent-soft: rgba(109,176,200,0.10); }  /* Tools */
+  .ch-2 { --accent: #e07355; --accent-soft: rgba(224,115,85,0.10); }   /* Filter */
+  .ch-3 { --accent: #95b87c; --accent-soft: rgba(149,184,124,0.10); }  /* Build */
+  .ch-4 { --accent: #e8b03e; --accent-soft: rgba(232,176,62,0.10); }   /* First Tasks */
+  .ch-5 { --accent: #b591d4; --accent-soft: rgba(181,145,212,0.10); }  /* Trust */
+  .ch-6 { --accent: #db838e; --accent-soft: rgba(219,131,142,0.10); }  /* Upkeep */
+  .ch-7 { --accent: #f4ecdb; --accent-soft: rgba(244,236,219,0.06); }  /* Recap */
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    pointer-events: none;
+    background-image: radial-gradient(rgba(244,236,219,0.012) 1px, transparent 1px);
+    background-size: 3px 3px;
+    z-index: 1;
+  }
+
+  /* ============ CHROME ============ */
+
+  .stage {
+    position: fixed; inset: 0;
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    z-index: 2;
+  }
+
+  .rail {
+    border-right: 1px solid var(--rule);
+    padding: 72px 32px;
+    display: flex;
+    flex-direction: column;
+    background: var(--ink);
+    z-index: 3;
+  }
+
+  .chapters { list-style: none; }
+  .chapter {
+    cursor: pointer;
+    padding: 14px 0;
+    display: grid;
+    grid-template-columns: 28px 1fr;
+    gap: 6px;
+    align-items: baseline;
+    transition: color 0.4s var(--transition);
+    color: var(--paper-faint);
+  }
+  .chapter:hover { color: var(--paper-dim); }
+  .chapter.active { color: var(--paper); }
+  .chapter .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: inherit;
+    opacity: 0.7;
+  }
+  .chapter .label {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 16px;
+    letter-spacing: -0.01em;
+    color: inherit;
+    font-variation-settings: "opsz" 18, "SOFT" 50;
+  }
+  .chapter.active .label {
+    color: var(--accent);
+    font-weight: 500;
+  }
+  .chapter .dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+    background: transparent;
+    align-self: center;
+    transition: background 0.4s var(--transition);
+  }
+  .chapter.active .dot { background: var(--accent); }
+
+  .counter {
+    position: fixed;
+    top: 36px;
+    right: 44px;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.1em;
+    color: var(--paper-faint);
+    z-index: 10;
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    font-size: 13px;
+  }
+  .counter .now {
+    color: var(--accent);
+    font-size: 18px;
+    font-weight: 500;
+    transition: color 0.5s var(--transition);
+  }
+
+  .progress {
+    position: fixed;
+    left: 240px; right: 0;
+    bottom: 0;
+    height: 1px;
+    background: var(--rule);
+    z-index: 5;
+  }
+  .progress-bar {
+    height: 100%;
+    background: var(--accent);
+    transition: width 0.6s var(--transition), background 0.5s var(--transition);
+    box-shadow: 0 0 8px var(--accent);
+  }
+
+  /* ============ CANVAS ============ */
+
+  .canvas {
+    position: relative;
+    overflow: hidden;
+    padding: 88px 128px 88px;
+  }
+
+  .slide {
+    position: absolute;
+    inset: 88px 128px 88px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.7s var(--transition);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+  .slide.active {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .slide::after {
+    content: '';
+    position: absolute;
+    inset: -88px -128px;
+    pointer-events: none;
+    background: radial-gradient(circle at 100% 0%, var(--accent-soft) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 1.2s ease;
+    z-index: -1;
+  }
+  .slide.active::after { opacity: 1; }
+
+  .slide.active .stagger > * {
+    animation: rise 0.85s var(--transition) both;
+  }
+  .slide.active .stagger > *:nth-child(1) { animation-delay: 0.05s; }
+  .slide.active .stagger > *:nth-child(2) { animation-delay: 0.18s; }
+  .slide.active .stagger > *:nth-child(3) { animation-delay: 0.31s; }
+  .slide.active .stagger > *:nth-child(4) { animation-delay: 0.44s; }
+  .slide.active .stagger > *:nth-child(5) { animation-delay: 0.57s; }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* step-through reveal */
+  [data-step] {
+    transition: opacity 0.5s var(--transition), filter 0.5s var(--transition);
+  }
+  [data-step]:not(.is-active) {
+    opacity: 0.14 !important;
+    filter: saturate(0.4);
+  }
+  [data-step].is-active {
+    opacity: 1 !important;
+  }
+
+  /* ============ TYPOGRAPHIC PRIMITIVES ============ */
+
+  .display {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    line-height: 0.95;
+    letter-spacing: -0.025em;
+    color: var(--paper);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+  .display em {
+    font-style: italic;
+    font-weight: 300;
+    color: var(--accent);
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .display strong { font-weight: 500; }
+
+  .d-3xl { font-size: 168px; }
+  .d-2xl { font-size: 132px; }
+  .d-xl  { font-size: 104px; }
+  .d-l   { font-size: 84px; }
+  .d-m   { font-size: 60px; }
+  .d-s   { font-size: 44px; }
+
+  .lede {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-style: italic;
+    font-size: 28px;
+    line-height: 1.4;
+    color: var(--paper-dim);
+    max-width: 760px;
+    font-variation-settings: "opsz" 30, "SOFT" 100;
+  }
+  .lede em { color: var(--accent); font-style: italic; }
+  .lede strong { color: var(--paper); font-weight: 400; font-style: normal; }
+
+  .body-text {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 22px;
+    line-height: 1.55;
+    color: var(--paper-dim);
+    max-width: 720px;
+  }
+  .body-text strong { color: var(--paper); font-weight: 400; }
+  .body-text em { color: var(--accent); font-style: normal; font-weight: 400; }
+
+  .tag {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  /* ===== Slide 1 — Definition (visual rhythm) ===== */
+  .def-slide { display: flex; flex-direction: column; gap: 56px; align-items: flex-start; }
+  .def-mark {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .def-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 132px;
+    line-height: 0.92;
+    letter-spacing: -0.03em;
+    color: var(--paper);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+  .def-title em {
+    color: var(--accent);
+    font-style: italic;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .def-rhythm { width: 100%; margin-top: 24px; }
+  .def-caption {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: 26px;
+    color: var(--paper-dim);
+    font-variation-settings: "opsz" 30, "SOFT" 100;
+  }
+  .def-caption em { color: var(--accent); font-style: italic; }
+
+  /* ===== Slide 2 — Tools combined ===== */
+  .tools2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    flex: 1;
+    align-self: stretch;
+    align-items: stretch;
+    border: 1px solid var(--rule-strong);
+  }
+  .tools2 > div + div { border-left: 1px solid var(--rule); }
+  .tool-col2 {
+    padding: 56px 56px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 36px;
+    text-align: center;
+  }
+  .tool-logo2 {
+    width: 220px; height: 220px;
+    border-radius: 36px;
+    overflow: hidden;
+    background: var(--ink-2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 80px -30px var(--accent);
+  }
+  .tool-logo2 img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .tool-name2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 52px;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--paper);
+    font-variation-settings: "opsz" 60, "SOFT" 30;
+  }
+  .tool-line2 {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .tool-rule2 {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 22px;
+    color: var(--paper-dim);
+    margin-top: 2px;
+    font-variation-settings: "opsz" 24, "SOFT" 100;
+  }
+  .tool-rule2 em { color: var(--accent); font-style: italic; }
+
+  /* ===== Slide 3 — Big question ===== */
+  .bigq-tag { margin-bottom: 36px; }
+
+  /* ===== Slide 4 — THREE tests (1×3 layout, animated) ===== */
+  .tri {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    flex: 1;
+    align-self: stretch;
+    border: 1px solid var(--rule-strong);
+    background: var(--ink-2);
+  }
+  .tri-cell {
+    padding: 56px 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    justify-content: center;
+    position: relative;
+    transition: opacity 0.5s var(--transition), filter 0.5s var(--transition);
+  }
+  .tri-cell + .tri-cell {
+    border-left: 1px solid var(--rule);
+  }
+  .tri-cell.is-active::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent-soft);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  .tri-num {
+    font-family: 'Fraunces', serif;
+    font-weight: 200;
+    font-size: 96px;
+    line-height: 0.9;
+    color: var(--accent);
+    letter-spacing: -0.04em;
+    font-variation-settings: "opsz" 144, "SOFT" 0;
+    transition: text-shadow 0.5s var(--transition);
+  }
+  .tri-cell.is-active .tri-num {
+    text-shadow: 0 0 60px var(--accent);
+  }
+  .tri-q {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 34px;
+    line-height: 1.15;
+    letter-spacing: -0.015em;
+    color: var(--paper);
+    font-variation-settings: "opsz" 48, "SOFT" 30;
+  }
+  .tri-q em {
+    color: var(--accent);
+    font-style: italic;
+    font-variation-settings: "opsz" 48, "SOFT" 100;
+  }
+  .tri-tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+  }
+  .tri-cell.is-active .tri-tag { color: var(--accent); }
+
+  /* ===== Slide 5 — Steps vs Accuracy chart (X-Y curve) ===== */
+  .xy-chart {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 56px;
+  }
+  .xy-chart .display { text-align: center; }
+  .xy-svg {
+    width: 100%;
+    max-width: 1000px;
+    height: 460px;
+  }
+
+  /* ===== Slide 6 — Three failure modes ===== */
+  .failures {
+    display: grid;
+    gap: 0;
+    border-top: 1px solid var(--rule-strong);
+    margin-top: 8px;
+  }
+  .fail-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 36px;
+    align-items: baseline;
+    padding: 32px 0;
+    border-bottom: 1px solid var(--rule);
+  }
+  .fail-row .n {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    letter-spacing: 0.2em;
+    color: var(--accent);
+  }
+  .fail-row .m {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 44px;
+    line-height: 1.15;
+    color: var(--paper);
+    font-variation-settings: "opsz" 60, "SOFT" 30;
+  }
+  .fail-row .m em {
+    color: var(--accent);
+    font-style: italic;
+    font-variation-settings: "opsz" 60, "SOFT" 100;
+  }
+
+  /* ===== Slide 7 — Output destinations ===== */
+  .dest-vis { display: flex; flex-direction: column; align-items: center; gap: 64px; }
+  .dest-hub {
+    border: 1px solid var(--accent);
+    background: var(--ink-2);
+    padding: 22px 44px;
+    border-radius: 6px;
+    box-shadow: 0 0 80px -20px var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .dest-fan { width: 100%; height: 80px; margin-top: -32px; }
+  .dest-tiles {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 28px;
+    width: 100%;
+    max-width: 1080px;
+    margin-top: -28px;
+  }
+  .dest-tile {
+    border: 1px solid var(--rule-strong);
+    padding: 28px 22px;
+    background: var(--ink-2);
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+  }
+  .dest-tile svg { width: 36px; height: 36px; color: var(--accent); }
+  .dest-tile .nm {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 24px;
+    color: var(--paper);
+    font-variation-settings: "opsz" 30, "SOFT" 30;
+  }
+  .dest-no {
+    margin-top: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.24em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+    border-top: 1px solid var(--rule);
+    padding-top: 24px;
+    text-align: center;
+    width: 100%;
+    max-width: 1080px;
+  }
+  .dest-no s { text-decoration-color: var(--rule-strong); }
+
+  /* ===== Slide 8 — Tasks quadrant (animated) ===== */
+  .tasks-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 0;
+    flex: 1;
+    align-self: stretch;
+    border: 1px solid var(--rule-strong);
+    background: var(--ink-2);
+  }
+  .task-cell {
+    padding: 40px 48px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    justify-content: center;
+    position: relative;
+    transition: opacity 0.5s var(--transition), filter 0.5s var(--transition);
+  }
+  .task-cell.is-active::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: var(--accent-soft);
+    opacity: 0.6;
+    pointer-events: none;
+  }
+  .tasks-grid > .task-cell:nth-child(1) { border-right: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+  .tasks-grid > .task-cell:nth-child(2) { border-bottom: 1px solid var(--rule); }
+  .tasks-grid > .task-cell:nth-child(3) { border-right: 1px solid var(--rule); }
+  .task-cad {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .task-name {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 52px;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    color: var(--paper);
+    font-variation-settings: "opsz" 60, "SOFT" 30;
+    margin-top: 4px;
+    transition: text-shadow 0.5s var(--transition);
+  }
+  .task-cell.is-active .task-name em {
+    text-shadow: 0 0 60px var(--accent);
+  }
+  .task-name em {
+    color: var(--accent);
+    font-style: italic;
+    font-variation-settings: "opsz" 60, "SOFT" 100;
+  }
+  .task-line {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: 19px;
+    line-height: 1.45;
+    color: var(--paper-dim);
+    font-variation-settings: "opsz" 24, "SOFT" 100;
+    max-width: 380px;
+    margin-top: 6px;
+  }
+
+  /* ===== Slide 9 — Run Now first ===== */
+  .runflow {
+    display: grid;
+    grid-template-columns: 1fr 80px 1fr 80px 1fr;
+    gap: 24px;
+    align-items: center;
+    margin-top: 56px;
+  }
+  .run-step {
+    border: 1px solid var(--rule-strong);
+    padding: 44px 28px;
+    text-align: center;
+    min-height: 240px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 20px;
+    background: var(--ink-2);
+  }
+  .run-step.final {
+    border-color: var(--accent);
+    box-shadow: 0 0 60px -20px var(--accent);
+  }
+  .run-step .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.28em;
+    color: var(--paper-faint);
+  }
+  .run-step.final .num { color: var(--accent); }
+  .run-step .what {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 32px;
+    line-height: 1.15;
+    color: var(--paper);
+    font-variation-settings: "opsz" 48, "SOFT" 30;
+  }
+  .run-step.final .what {
+    color: var(--accent);
+    font-style: italic;
+    font-variation-settings: "opsz" 48, "SOFT" 100;
+  }
+  .run-arr {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--accent);
+    text-align: center;
+    font-size: 26px;
+  }
+
+  /* ===== Slide 10 — Watchers (animated) ===== */
+  .watchers2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    flex: 1;
+    align-self: stretch;
+    border: 1px solid var(--rule-strong);
+  }
+  .watcher2 {
+    padding: 56px 56px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 28px;
+  }
+  .watchers2 > .watcher2 + .watcher2 { border-left: 1px solid var(--rule); }
+  .watcher2 .cad {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .watcher2 .nm {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 84px;
+    line-height: 0.95;
+    letter-spacing: -0.025em;
+    color: var(--paper);
+    font-variation-settings: "opsz" 144, "SOFT" 30;
+  }
+  .watcher2 .nm em {
+    color: var(--accent);
+    font-style: italic;
+    font-variation-settings: "opsz" 144, "SOFT" 100;
+  }
+  .ekg-wrap { display: flex; flex-direction: column; gap: 14px; margin-top: 18px; }
+  .ekg-svg { width: 100%; height: 96px; border-bottom: 1px solid var(--rule); }
+  .ekg-days {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--paper-faint);
+  }
+  .wd-board {
+    margin-top: 18px;
+    border: 1px solid var(--rule);
+    background: var(--ink);
+  }
+  .watcher2 .wd-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 14px 22px;
+    border-bottom: 1px solid var(--rule);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 400;
+    line-height: 1;
+    color: var(--paper);
+  }
+  .watcher2 .wd-row:last-child { border-bottom: none; }
+  .watcher2 .wd-row .nm {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 400;
+    color: var(--paper);
+    line-height: 1;
+    font-style: normal;
+  }
+  .watcher2 .wd-row .st {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1;
+  }
+  .watcher2 .wd-row .st .pip {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .watcher2 .wd-row.ok .st { color: var(--accent); }
+  .watcher2 .wd-row.ok .st .pip { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  .watcher2 .wd-row.fail .st { color: var(--paper-dim); }
+  .watcher2 .wd-row.fail .st .pip { background: var(--paper-dim); }
+  .watcher2 .wd-row.silent .st { color: var(--paper-faint); }
+  .watcher2 .wd-row.silent .st .pip { background: var(--rule-strong); border: 1px solid var(--paper-faint); }
+
+  /* ===== Slide 11 — Upkeep ===== */
+  .upkeep-vis { display: flex; flex-direction: column; gap: 64px; }
+  .upkeep-title {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 60px;
+    line-height: 1.05;
+    letter-spacing: -0.02em;
+    color: var(--paper);
+    font-variation-settings: "opsz" 80, "SOFT" 30;
+  }
+  .upkeep-title em {
+    color: var(--accent);
+    font-style: italic;
+    font-variation-settings: "opsz" 80, "SOFT" 100;
+  }
+  .timeline-track {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 10px;
+    align-items: end;
+    height: 120px;
+  }
+  .month {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+  }
+  .month .bar {
+    width: 100%;
+    height: 76px;
+    background: var(--rule-strong);
+    transition: background 0.5s;
+  }
+  .month.kept .bar { background: var(--accent); box-shadow: 0 0 14px -2px var(--accent); }
+  .month.killed .bar { background: var(--paper-faint); opacity: 0.3; }
+  .month .lbl {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: var(--paper-dim);
+  }
+  .month.killed .lbl {
+    text-decoration: line-through;
+    text-decoration-color: var(--paper-faint);
+    color: var(--paper-faint);
+  }
+  .upkeep-question {
+    border-top: 1px solid var(--rule-strong);
+    padding-top: 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+  .upkeep-question .when {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    letter-spacing: 0.28em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+  .upkeep-question .qq {
+    font-family: 'Fraunces', serif;
+    font-style: italic;
+    font-weight: 300;
+    font-size: 48px;
+    line-height: 1.15;
+    color: var(--paper);
+    font-variation-settings: "opsz" 60, "SOFT" 100;
+    max-width: 1080px;
+  }
+  .upkeep-question .qq em { color: var(--accent); }
+
+  /* ===== Slide 12 — Recap (animated) ===== */
+  .recap-list {
+    display: grid;
+    gap: 0;
+    border-top: 2px solid var(--accent);
+    margin-top: 36px;
+  }
+  .recap-row {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 36px;
+    align-items: baseline;
+    padding: 28px 0;
+    border-bottom: 1px solid var(--rule);
+    transition: opacity 0.5s var(--transition);
+  }
+  .recap-row .n {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    letter-spacing: 0.24em;
+    color: var(--accent);
+  }
+  .recap-row .w {
+    font-family: 'Fraunces', serif;
+    font-weight: 300;
+    font-size: 38px;
+    line-height: 1.2;
+    color: var(--paper);
+    font-variation-settings: "opsz" 48, "SOFT" 30;
+  }
+  .recap-row .w em {
+    color: var(--accent);
+    font-style: italic;
+    font-variation-settings: "opsz" 48, "SOFT" 100;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage">
+  <nav class="rail">
+    <ul class="chapters" id="chapter-nav"></ul>
+  </nav>
+
+  <div class="counter">
+    <span class="now" id="counter-now">01</span>
+    <span>/</span>
+    <span id="counter-total">12</span>
+  </div>
+
+  <div class="canvas">
+
+    <!-- ============================================== -->
+    <!-- 01 · Definition (visual rhythm)                  -->
+    <!-- ============================================== -->
+    <section class="slide ch-0" data-chapter="0">
+      <div class="def-slide stagger">
+        <div class="def-mark">Term · 01</div>
+        <div class="def-title">Scheduled <em>Tasks.</em></div>
+        <div class="def-rhythm">
+          <svg viewBox="0 0 1240 120" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:120px;">
+            <line x1="80" y1="60" x2="1200" y2="60" stroke="var(--rule)" stroke-width="0.5"/>
+            <g>
+              <circle cx="100" cy="60" r="10" fill="var(--accent)" style="filter: drop-shadow(0 0 16px var(--accent));"/>
+              <circle cx="100" cy="60" r="22" fill="none" stroke="var(--accent)" stroke-width="0.6" opacity="0.6"/>
+              <text x="100" y="100" text-anchor="middle" fill="var(--paper-faint)"
+                    font-family="JetBrains Mono" font-size="11" letter-spacing="2">PROMPT · 1×</text>
+            </g>
+            <g stroke="var(--accent)" stroke-width="2" stroke-linecap="round" style="filter: drop-shadow(0 0 6px var(--accent));">
+              <line x1="260" y1="40" x2="260" y2="80"/>
+              <line x1="400" y1="40" x2="400" y2="80"/>
+              <line x1="540" y1="40" x2="540" y2="80"/>
+              <line x1="680" y1="40" x2="680" y2="80"/>
+              <line x1="820" y1="40" x2="820" y2="80"/>
+              <line x1="960" y1="40" x2="960" y2="80"/>
+              <line x1="1100" y1="40" x2="1100" y2="80"/>
+              <line x1="1200" y1="40" x2="1200" y2="80"/>
+            </g>
+            <g fill="var(--paper-faint)" font-family="JetBrains Mono" font-size="11" letter-spacing="2" text-anchor="middle">
+              <text x="260" y="100">MON</text>
+              <text x="400" y="100">TUE</text>
+              <text x="540" y="100">WED</text>
+              <text x="680" y="100">THU</text>
+              <text x="820" y="100">FRI</text>
+              <text x="960" y="100">SAT</text>
+              <text x="1100" y="100">SUN</text>
+              <text x="1200" y="100">···</text>
+            </g>
+          </svg>
+        </div>
+        <div class="def-caption">Write once. Runs on <em>its own clock</em>.</div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 02 · Tools combined                              -->
+    <!-- ============================================== -->
+    <section class="slide ch-1" data-chapter="1">
+      <div class="tools2 stagger">
+        <div class="tool-col2">
+          <div class="tool-logo2">
+            <img src="file:///Users/dylan/Desktop/Vids/YouTube%20Videos/Stop%20Chatting%20With%20AI.%20Schedule%20It%20in%20Claude%20or%20Codex%20Instead./cowork.jpg" alt="Claude Cowork">
+          </div>
+          <div>
+            <div class="tool-name2">Claude Cowork</div>
+            <div class="tool-line2" style="margin-top:14px;">Anthropic</div>
+          </div>
+          <div class="tool-rule2">if you&rsquo;re a <em>Claude</em> user</div>
+        </div>
+        <div class="tool-col2">
+          <div class="tool-logo2">
+            <img src="file:///Users/dylan/Desktop/Vids/YouTube%20Videos/Stop%20Chatting%20With%20AI.%20Schedule%20It%20in%20Claude%20or%20Codex%20Instead./codex.png" alt="Codex">
+          </div>
+          <div>
+            <div class="tool-name2">Codex</div>
+            <div class="tool-line2" style="margin-top:14px;">OpenAI</div>
+          </div>
+          <div class="tool-rule2">if you&rsquo;re an <em>OpenAI</em> user</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 03 · Big question                                -->
+    <!-- ============================================== -->
+    <section class="slide ch-2" data-chapter="2">
+      <div class="stagger">
+        <div class="tag bigq-tag">One question — answered honestly</div>
+        <div class="display d-2xl">
+          Should this <em>even</em><br>be on a schedule?
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 04 · Three tests (1×3, animated)                 -->
+    <!-- ============================================== -->
+    <section class="slide ch-2" data-chapter="2" data-steps="3">
+      <div class="tri stagger">
+        <div class="tri-cell" data-step="0">
+          <div class="tri-num">01</div>
+          <div class="tri-q">Does it need to run on a <em>clock?</em></div>
+          <div class="tri-tag">cadence</div>
+        </div>
+        <div class="tri-cell" data-step="1">
+          <div class="tri-num">02</div>
+          <div class="tri-q">Will you do something <em>different?</em></div>
+          <div class="tri-tag">action</div>
+        </div>
+        <div class="tri-cell" data-step="2">
+          <div class="tri-num">03</div>
+          <div class="tri-q">Connected — and allowed to <em>act?</em></div>
+          <div class="tri-tag">permission</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 05 · Steps vs Accuracy (X-Y curve)               -->
+    <!-- ============================================== -->
+    <section class="slide ch-2" data-chapter="2">
+      <div class="xy-chart stagger">
+        <div class="display d-m">One scheduled task. <em>One job.</em></div>
+        <svg class="xy-svg" viewBox="0 0 1000 460" xmlns="http://www.w3.org/2000/svg">
+          <!-- axes -->
+          <line x1="100" y1="50" x2="100" y2="380" stroke="var(--rule-strong)" stroke-width="1"/>
+          <line x1="100" y1="380" x2="940" y2="380" stroke="var(--rule-strong)" stroke-width="1"/>
+
+          <!-- subtle gridlines -->
+          <g stroke="var(--rule)" stroke-width="0.5" stroke-dasharray="2,4">
+            <line x1="100" y1="100" x2="940" y2="100"/>
+            <line x1="100" y1="190" x2="940" y2="190"/>
+            <line x1="100" y1="280" x2="940" y2="280"/>
+            <line x1="310" y1="50" x2="310" y2="380"/>
+            <line x1="520" y1="50" x2="520" y2="380"/>
+            <line x1="730" y1="50" x2="730" y2="380"/>
+          </g>
+
+          <!-- Y axis label rotated -->
+          <text x="55" y="220" text-anchor="middle" transform="rotate(-90 55 220)"
+                fill="var(--paper-faint)" font-family="JetBrains Mono"
+                font-size="13" letter-spacing="4">ACCURACY</text>
+
+          <!-- Y endpoints -->
+          <text x="92" y="58" text-anchor="end" fill="var(--paper-dim)"
+                font-family="JetBrains Mono" font-size="12" letter-spacing="2">HIGH</text>
+          <text x="92" y="382" text-anchor="end" fill="var(--paper-dim)"
+                font-family="JetBrains Mono" font-size="12" letter-spacing="2">LOW</text>
+
+          <!-- X axis label -->
+          <text x="520" y="430" text-anchor="middle"
+                fill="var(--paper-faint)" font-family="JetBrains Mono"
+                font-size="13" letter-spacing="4">STEPS PER TASK</text>
+
+          <!-- X endpoints -->
+          <text x="100" y="405" text-anchor="middle" fill="var(--paper-dim)"
+                font-family="JetBrains Mono" font-size="12" letter-spacing="2">FEW</text>
+          <text x="940" y="405" text-anchor="middle" fill="var(--paper-dim)"
+                font-family="JetBrains Mono" font-size="12" letter-spacing="2">MANY</text>
+
+          <!-- the curve -->
+          <path d="M 120 70 C 280 80, 380 130, 500 250 S 760 360, 920 372"
+                fill="none" stroke="var(--accent)" stroke-width="2.5"
+                stroke-linecap="round"
+                style="filter: drop-shadow(0 0 10px var(--accent));"/>
+
+          <!-- endpoint dots -->
+          <circle cx="120" cy="70" r="6" fill="var(--accent)"
+                  style="filter: drop-shadow(0 0 12px var(--accent));"/>
+          <circle cx="920" cy="372" r="5" fill="var(--paper-faint)"/>
+
+          <!-- annotations -->
+          <text x="140" y="58" fill="var(--accent)" font-family="JetBrains Mono"
+                font-size="11" letter-spacing="2">1 STEP</text>
+          <text x="912" y="362" text-anchor="end" fill="var(--paper-faint)"
+                font-family="JetBrains Mono" font-size="11" letter-spacing="2">20+ STEPS</text>
+        </svg>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 06 · Three failure modes                         -->
+    <!-- ============================================== -->
+    <section class="slide ch-3" data-chapter="3">
+      <div class="stagger">
+        <div class="display d-s">Three ways it can <em>go silent.</em></div>
+        <div class="failures">
+          <div class="fail-row">
+            <div class="n">01</div>
+            <div class="m">It never <em>runs at all.</em></div>
+          </div>
+          <div class="fail-row">
+            <div class="n">02</div>
+            <div class="m">It can&rsquo;t reach the <em>right source.</em></div>
+          </div>
+          <div class="fail-row">
+            <div class="n">03</div>
+            <div class="m">The output lands where <em>nobody looks.</em></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 07 · Output destinations (visual)                -->
+    <!-- ============================================== -->
+    <section class="slide ch-3" data-chapter="3">
+      <div class="stagger" style="display:flex; flex-direction:column; align-items:center; gap:36px;">
+        <div class="display d-m" style="text-align:center;">Make the AI <em>walk to you.</em></div>
+        <div class="dest-vis">
+          <div class="dest-hub">Output</div>
+          <svg class="dest-fan" viewBox="0 0 1080 80" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <g stroke="var(--accent)" stroke-width="1" fill="none" opacity="0.55">
+              <path d="M 540 0 L 135 80"/>
+              <path d="M 540 0 L 405 80"/>
+              <path d="M 540 0 L 675 80"/>
+              <path d="M 540 0 L 945 80"/>
+            </g>
+          </svg>
+          <div class="dest-tiles">
+            <div class="dest-tile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="5" width="18" height="14" rx="1.5"/>
+                <path d="M3 7l9 6 9-6"/>
+              </svg>
+              <div class="nm">Inbox</div>
+            </div>
+            <div class="dest-tile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 9 9 0 0 1-4-1L3 20l1.6-4A8.38 8.38 0 0 1 3 11.5 8.5 8.5 0 0 1 11.5 3a8.38 8.38 0 0 1 9.5 8.5z"/>
+              </svg>
+              <div class="nm">Slack</div>
+            </div>
+            <div class="dest-tile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <rect x="3" y="3" width="18" height="18" rx="1.5"/>
+                <line x1="3" y1="9" x2="21" y2="9"/>
+                <line x1="3" y1="15" x2="21" y2="15"/>
+                <line x1="9" y1="3" x2="9" y2="21"/>
+                <line x1="15" y1="3" x2="15" y2="21"/>
+              </svg>
+              <div class="nm">Sheet</div>
+            </div>
+            <div class="dest-tile">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
+              </svg>
+              <div class="nm">Folder</div>
+            </div>
+          </div>
+          <div class="dest-no"><s>Inside the AI app you forget to open</s></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 08 · Four tasks (animated)                       -->
+    <!-- ============================================== -->
+    <section class="slide ch-4" data-chapter="4" data-steps="4">
+      <div class="tasks-grid stagger">
+        <div class="task-cell" data-step="0">
+          <div class="task-cad">Mon · 07:00</div>
+          <div class="task-name">Monday<br><em>Briefing.</em></div>
+          <div class="task-line">Reads calendar, inbox, tasks. Drops a brief in your drafts.</div>
+        </div>
+        <div class="task-cell" data-step="1">
+          <div class="task-cad">Weekly</div>
+          <div class="task-name">Recurring<br><em>Update.</em></div>
+          <div class="task-line">Pulls fresh data, refreshes the dashboard you already open.</div>
+        </div>
+        <div class="task-cell" data-step="2">
+          <div class="task-cad">Every evening</div>
+          <div class="task-name">Next-Day<br><em>Prep.</em></div>
+          <div class="task-line">Tomorrow&rsquo;s meetings, prior notes, attendees, follow-ups.</div>
+        </div>
+        <div class="task-cell" data-step="3">
+          <div class="task-cad">Weekly</div>
+          <div class="task-name">Follow-up<br><em>Sweeper.</em></div>
+          <div class="task-line">Scans CRM for 30-day silences. Drafts personal notes — never sends.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 09 · Run Now first                               -->
+    <!-- ============================================== -->
+    <section class="slide ch-5" data-chapter="5">
+      <div class="stagger">
+        <div class="display d-m">It runs <em>once,</em> in front of you. Then it earns the schedule.</div>
+        <div class="runflow">
+          <div class="run-step">
+            <div class="num">01</div>
+            <div class="what">Write the prompt</div>
+          </div>
+          <div class="run-arr">→</div>
+          <div class="run-step">
+            <div class="num">02</div>
+            <div class="what">Run Now — watch it</div>
+          </div>
+          <div class="run-arr">→</div>
+          <div class="run-step final">
+            <div class="num">03</div>
+            <div class="what">Then schedule it</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 10 · Watchers (animated)                         -->
+    <!-- ============================================== -->
+    <section class="slide ch-5" data-chapter="5" data-steps="2">
+      <div class="watchers2 stagger">
+        <div class="watcher2" data-step="0">
+          <div class="cad">Daily · 07:00</div>
+          <div class="nm">The<br><em>Heartbeat.</em></div>
+          <div class="ekg-wrap">
+            <svg class="ekg-svg" viewBox="0 0 600 96" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+              <line x1="0" y1="48" x2="600" y2="48" stroke="var(--rule)" stroke-width="0.5"/>
+              <path d="M 0 48 L 60 48 L 70 22 L 80 74 L 90 48 L 160 48 L 170 22 L 180 74 L 190 48 L 260 48 L 270 22 L 280 74 L 290 48 L 360 48 L 370 22 L 380 74 L 390 48 L 460 48 L 470 22 L 480 74 L 490 48 L 600 48"
+                    fill="none" stroke="var(--accent)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"
+                    style="filter: drop-shadow(0 0 5px var(--accent));"/>
+              <circle cx="80" cy="74" r="3" fill="var(--accent)"/>
+              <circle cx="180" cy="74" r="3" fill="var(--accent)"/>
+              <circle cx="280" cy="74" r="3" fill="var(--accent)"/>
+              <circle cx="380" cy="74" r="3" fill="var(--accent)"/>
+              <circle cx="480" cy="74" r="3" fill="var(--accent)"/>
+            </svg>
+            <div class="ekg-days">
+              <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span>
+            </div>
+          </div>
+        </div>
+        <div class="watcher2" data-step="1">
+          <div class="cad">Weekly review</div>
+          <div class="nm">The<br><em>Watchdog.</em></div>
+          <div class="wd-board">
+            <div class="wd-row ok"><span class="nm">monday-brief</span><span class="st"><span class="pip"></span>ran</span></div>
+            <div class="wd-row ok"><span class="nm">next-day-prep</span><span class="st"><span class="pip"></span>ran</span></div>
+            <div class="wd-row fail"><span class="nm">followup-sweeper</span><span class="st"><span class="pip"></span>failed</span></div>
+            <div class="wd-row silent"><span class="nm">dashboard-refresh</span><span class="st"><span class="pip"></span>silent</span></div>
+            <div class="wd-row ok"><span class="nm">heartbeat</span><span class="st"><span class="pip"></span>ran</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 11 · Upkeep                                      -->
+    <!-- ============================================== -->
+    <section class="slide ch-6" data-chapter="6">
+      <div class="upkeep-vis stagger">
+        <div class="upkeep-title">
+          Don&rsquo;t let an old task <em>pretend</em> to be useful.
+        </div>
+        <div class="timeline-track">
+          <div class="month kept"><div class="bar"></div><div class="lbl">Jan</div></div>
+          <div class="month kept"><div class="bar"></div><div class="lbl">Feb</div></div>
+          <div class="month kept"><div class="bar"></div><div class="lbl">Mar</div></div>
+          <div class="month killed"><div class="bar"></div><div class="lbl">Apr</div></div>
+          <div class="month kept"><div class="bar"></div><div class="lbl">May</div></div>
+          <div class="month kept"><div class="bar"></div><div class="lbl">Jun</div></div>
+          <div class="month killed"><div class="bar"></div><div class="lbl">Jul</div></div>
+          <div class="month kept"><div class="bar"></div><div class="lbl">Aug</div></div>
+          <div class="month killed"><div class="bar"></div><div class="lbl">Sep</div></div>
+          <div class="month kept"><div class="bar"></div><div class="lbl">Oct</div></div>
+          <div class="month kept"><div class="bar"></div><div class="lbl">Nov</div></div>
+          <div class="month kept"><div class="bar"></div><div class="lbl">Dec</div></div>
+        </div>
+        <div class="upkeep-question">
+          <div class="when">Once a month — ask</div>
+          <div class="qq">Is this still <em>earning its slot?</em></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- 12 · Recap (animated)                            -->
+    <!-- ============================================== -->
+    <section class="slide ch-7" data-chapter="7" data-steps="5">
+      <div class="stagger">
+        <div class="display d-m">The system, in <em>five lines.</em></div>
+        <div class="recap-list">
+          <div class="recap-row" data-step="0">
+            <div class="n">01</div>
+            <div class="w">Pick the tool you <em>already use.</em></div>
+          </div>
+          <div class="recap-row" data-step="1">
+            <div class="n">02</div>
+            <div class="w">Decide what&rsquo;s actually <em>worth scheduling.</em></div>
+          </div>
+          <div class="recap-row" data-step="2">
+            <div class="n">03</div>
+            <div class="w">Test the task <em>once</em> before you turn it loose.</div>
+          </div>
+          <div class="recap-row" data-step="3">
+            <div class="n">04</div>
+            <div class="w">Send the output where you <em>already check.</em></div>
+          </div>
+          <div class="recap-row" data-step="4">
+            <div class="n">05</div>
+            <div class="w">Audit it once a month.</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+</div>
+
+<script>
+  const chapters = [
+    { num: '01', label: 'The Promise' },
+    { num: '02', label: 'The Tools' },
+    { num: '03', label: 'The Filter' },
+    { num: '04', label: 'The Build' },
+    { num: '05', label: 'First Tasks' },
+    { num: '06', label: 'The Trust' },
+    { num: '07', label: 'The Upkeep' },
+    { num: '08', label: 'Recap' }
+  ];
+
+  const navEl = document.getElementById('chapter-nav');
+  chapters.forEach((c, i) => {
+    const li = document.createElement('li');
+    li.className = 'chapter';
+    li.dataset.chapter = i;
+    li.innerHTML = `
+      <span class="dot"></span>
+      <div>
+        <div class="num">${c.num}</div>
+        <div class="label">${c.label}</div>
+      </div>`;
+    li.addEventListener('click', () => {
+      const idx = slides.findIndex(s => parseInt(s.dataset.chapter) === i);
+      if (idx !== -1) goTo(idx);
+    });
+    navEl.appendChild(li);
+  });
+
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  document.getElementById('counter-total').textContent = String(total).padStart(2, '0');
+
+  let current = 0;
+  let currentStep = 0;
+
+  function getSlideSteps() {
+    return parseInt(slides[current].dataset.steps || '0', 10);
+  }
+
+  function applySteps() {
+    const slide = slides[current];
+    const total = parseInt(slide.dataset.steps || '0', 10);
+    if (total === 0) return;
+    slide.querySelectorAll('[data-step]').forEach(el => {
+      const s = parseInt(el.dataset.step, 10);
+      el.classList.toggle('is-active', s === currentStep);
+    });
+  }
+
+  function render() {
+    slides.forEach((s, i) => s.classList.toggle('active', i === current));
+    const ch = parseInt(slides[current].dataset.chapter, 10);
+    document.querySelectorAll('.chapter').forEach((el, i) => el.classList.toggle('active', i === ch));
+
+    const tmp = document.createElement('div');
+    tmp.className = 'ch-' + ch;
+    document.body.appendChild(tmp);
+    const accent = getComputedStyle(tmp).getPropertyValue('--accent').trim();
+    document.body.removeChild(tmp);
+    document.documentElement.style.setProperty('--accent', accent);
+
+    document.getElementById('counter-now').textContent = String(current + 1).padStart(2, '0');
+    document.getElementById('progress-bar').style.width = ((current + 1) / total * 100) + '%';
+
+    applySteps();
+  }
+
+  function goTo(i) {
+    current = Math.max(0, Math.min(total - 1, i));
+    currentStep = 0;
+    render();
+  }
+
+  function next() {
+    const steps = getSlideSteps();
+    if (steps > 0 && currentStep < steps - 1) {
+      currentStep++;
+      applySteps();
+    } else if (current < total - 1) {
+      goTo(current + 1);
+    }
+  }
+
+  function prev() {
+    const steps = getSlideSteps();
+    if (steps > 0 && currentStep > 0) {
+      currentStep--;
+      applySteps();
+    } else if (current > 0) {
+      current = current - 1;
+      const targetSteps = parseInt(slides[current].dataset.steps || '0', 10);
+      currentStep = targetSteps > 0 ? targetSteps - 1 : 0;
+      render();
+    }
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+      e.preventDefault();
+      next();
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault();
+      prev();
+    } else if (e.key === 'Home') {
+      goTo(0);
+    } else if (e.key === 'End') {
+      goTo(total - 1);
+    } else if (e.key === 'f' || e.key === 'F') {
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+      else document.exitFullscreen();
+    }
+  });
+
+  function syncFromHash() {
+    const m = location.hash.match(/^#(\d+)$/);
+    if (m) {
+      const i = parseInt(m[1], 10) - 1;
+      if (!isNaN(i)) goTo(i);
+    }
+  }
+  window.addEventListener('hashchange', syncFromHash);
+  syncFromHash();
+  render();
+</script>
+
+</body>
+</html>
